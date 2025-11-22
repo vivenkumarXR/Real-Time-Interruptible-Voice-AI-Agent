@@ -1,105 +1,89 @@
-import time
-import requests  # pip install requests
-from flask import Flask, render_template, request, jsonify  # pip install flask
-from flask_cors import CORS  # pip install flask-cors
+import time #for time measuring
+import requests #for making request to ollama services
+from flask import Flask, jsonify, request, render_template  #for using flasl Json structure and render the html page
+from flask_cors import CORS # for bipassing browser security
 
-# --- CONFIGURATION ---
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3"  # Ensure you have run 'ollama pull llama3'
+#--- CONFIGURATION for Ollama--- 
+OLLAMA_URL = "http://localhost:11434/api/generate" #ollama url
+MODEL_NAME = "llama3" # model name
 
 # Initialize Flask
-# template_folder='templates' tells Flask to look for HTML files in the 'templates' folder
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, template_folder='templates') #template folder for html files  
 
-# Enable CORS (Cross-Origin Resource Sharing)
-# This allows the frontend to communicate with the backend without security errors,
-# even if you decide to use Live Server later.
+#enable CORS
 CORS(app)
 
-# --- HELPER FUNCTIONS ---
+#   Logs
 def log(msg):
-    """Simple logging function to print to the terminal with a tag."""
+    
     print(f"[DEBUG] {msg}")
 
-# --- ROUTES ---
 
-@app.route('/')
+#--- ROUTES ---
+@app.route('/') #for home route
 def home():
-    """Serves the main HTML page."""
-    return render_template('index.html')
+    
+    return render_template('index.html') #server homepage
 
-@app.route('/process_speech', methods=['POST'])
+#for speech
+@app.route('/process_speech', methods=['POST']) 
+
 def process_speech():
-    """Receives text from the frontend, sends it to Ollama, and returns the response."""
+    #start time
     start_time = time.time()
     
-    # 1. Receive and Parse Data
+   
     try:
         data = request.json
         user_text = data.get('text', '').strip()
-        log(f"📨 Request Received. User said: '{user_text}'")
+
+
+        log(f"Request Received. User said: '{user_text}'") #for logs
         
         if not user_text:
-            log("⚠️ Empty text received. Ignoring.")
+            log("Empty text received. Ignoring.") #for logs
             return jsonify({'reply': ""})
 
     except Exception as e:
-        log(f"❌ Error parsing request: {e}")
+        log(f"Error parsing request: {e}") #for logs
         return jsonify({'error': 'Bad Request'}), 400
 
-    # 2. Local Rules (Fast responses for specific commands)
+# trun all to lower case and chcek
     lower_text = user_text.lower()
     
-    # Check for stop commands
     if lower_text in ['stop', 'quiet', 'shut up', 'exit', 'cancel']:
-        log("🛑 Stop command detected.")
+        log("Stop command detected.") #for logs
         return jsonify({'reply': "Okay, stopping."})
     
-    # Check for greetings
     if lower_text in ['hi', 'hello', 'hey']:
         return jsonify({'reply': "Hello! How can I help you today?"})
-
-    # 3. Send to Ollama (The "Brain")
-    log(f"🧠 Sending to Ollama ({MODEL_NAME})...")
     
-    payload = {
-        "model": MODEL_NAME, 
-        "prompt": user_text, 
-        "stream": False
-    }
+    #--- Ollama payload ---
+    payload = {"model": MODEL_NAME, "prompt": user_text, "stream": False}
+
+    log(f"Sending to Ollama ({MODEL_NAME})...") #for logs
 
     try:
-        # Timeout set to 30s in case the model is slow to load or generate
-        response = requests.post(OLLAMA_URL, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            # Extract the actual text response from Ollama's JSON
-            reply_text = response.json().get('response', '')
-            duration = round(time.time() - start_time, 2)
-            
-            log(f"✅ Ollama replied in {duration}s. Length: {len(reply_text)} chars")
-            # log(f"📝 Full Reply: {reply_text}") # Uncomment to see full text in terminal
-            
-            return jsonify({'reply': reply_text})
-        else:
-            log(f"⚠️ Ollama Error Status: {response.status_code}")
-            return jsonify({'reply': "I had trouble thinking of an answer."})
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=10)
 
-    except requests.exceptions.ConnectionError:
-        log("❌ CRITICAL: Could not connect to Ollama. Is 'ollama serve' running?")
-        return jsonify({'reply': "I cannot reach my brain. Please check if Ollama is running."})
+        if resp.status_code == 200:
+            reply = resp.json().get("response", "")
+            log(f"Received response from Ollama in {time.time() - start_time:.2f} seconds.") #for logs
+            return jsonify({'reply': reply})
+        else:
+            log(f"Ollama returned status code {resp.status_code}.") #for logs
+            return jsonify({'reply': "I had a network error."})
         
     except Exception as e:
-        log(f"❌ Unexpected Error: {e}")
-        return jsonify({'reply': "Something went wrong internally."})
+        log(f"Error communicating with Ollama: {e}") #for logs
+        return jsonify({'reply': "I cannot reach the AI model. Is Ollama running?"})
 
-# --- MAIN ENTRY POINT ---
+
+
+
+#--- RUN SERVER ---
 if __name__ == '__main__':
-    print("\n" + "="*50)
-    print(" SERVER RUNNING on http://localhost:5000")
-    print(f" Target LLM: {MODEL_NAME}")
-    print(" Keep this window open to see Backend Logs")
-    print("="*50 + "\n")
+     print(" SERVER RUNNING on http://localhost:5000")
     
-    # debug=True allows auto-reload when you change the code
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # debug= true as allow auto relaod
+     app.run(host='0.0.0.0', port=5000, debug=True)
